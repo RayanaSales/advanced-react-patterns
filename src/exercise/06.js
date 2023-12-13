@@ -3,6 +3,7 @@
 
 import * as React from 'react'
 import {Switch} from '../switch'
+import warning from 'warning'
 import {act} from 'react-dom/test-utils'
 
 const callAll =
@@ -29,11 +30,58 @@ function toggleReducer(state, {type, initialState}) {
   }
 }
 
+function useControllSwitchWarning(
+  controlPropValue,
+  controlPropName,
+  componentName,
+) {
+  const isControlled = controlPropValue != null
+  const {current: wasControlled} = React.useRef(isControlled)
+  React.useEffect(() => {
+    warning(
+      !(isControlled && !wasControlled),
+      `${componentName} is changing from uncontrolled to control. Check the ${controlPropName} prop.`,
+    )
+    warning(
+      !(!isControlled && wasControlled),
+      `${componentName} is changing from control to uncontrolled. Check the ${controlPropName} prop.`,
+    )
+  }, [componentName, controlPropName, isControlled, wasControlled])
+}
+
+function useOnChangeReadOnlyWarning(
+  controlPropValue,
+  controlPropName,
+  componentName,
+  hasOnchange,
+  readOnly,
+  readOnlyProp,
+  initialValueProp,
+  onChangeProp,
+) {
+  const isControlled = controlPropValue != null
+  React.useEffect(() => {
+    warning(
+      !(!hasOnchange && isControlled && !readOnly),
+      `An on prop was provided to useToggle without an onChange handler. This will result in a read-only ${controlPropName} value. If you want it to be mutable, use ${initialValueProp}. Otherwise, set either ${onChangeProp} or ${readOnlyProp}.`,
+    )
+  }, [
+    controlPropName,
+    hasOnchange,
+    initialValueProp,
+    isControlled,
+    onChangeProp,
+    readOnly,
+    readOnlyProp,
+  ])
+}
+
 function useToggle({
   initialOn = false,
   reducer = toggleReducer,
   onChange,
   on: controlledOn,
+  readOnly = false,
 } = {}) {
   const {current: initialState} = React.useRef({on: initialOn})
   const [state, dispatch] = React.useReducer(reducer, initialState)
@@ -44,10 +92,22 @@ function useToggle({
    */
   const on = onIsControlled ? controlledOn : state.on
 
+  useControllSwitchWarning(controlledOn, 'on', 'useToggle')
+  useOnChangeReadOnlyWarning(
+    controlledOn,
+    'on',
+    'useToggle',
+    Boolean(onChange),
+    readOnly,
+    'readOnly',
+    'initialOn',
+    'onChange',
+  )
+
   // we did this just for adding an onChange hanlder inside
   /* anywhere we are updating the state, we need first to detemrinate where 
+  if the state is being controlled we will not update our internal state.
      are we being controlled? Outside or inside? 
-     if the state is being controlled we will not update our internal state.
      otherwise we will because we are managing ourselfs.
   */
   function dispatchWithOnChange(action) {
@@ -87,10 +147,11 @@ function useToggle({
   }
 }
 
-function Toggle({on: controlledOn, onChange}) {
+function Toggle({on: controlledOn, onChange, readOnly}) {
   const {on, getTogglerProps} = useToggle({
     on: controlledOn,
     onChange,
+    readOnly,
   })
   const props = getTogglerProps({on})
   return <Switch {...props} />
@@ -134,9 +195,9 @@ function App() {
         {/* this manages his own state */}
         <div>Uncontrolled Toggle:</div>
         <Toggle
-          onChange={(...args) =>
-            console.info('Uncontrolled Toggle onChange', ...args)
-          }
+        // onChange={(...args) =>
+        //   console.info('Uncontrolled Toggle onChange', ...args)
+        // }
         />
       </div>
     </div>
